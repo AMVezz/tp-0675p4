@@ -1,10 +1,47 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>Progress</title><link rel="stylesheet" href="style.css"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-180.png"><link rel="icon" href="icon-192.png">
-<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Training">
-<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#1a1d22" media="(prefers-color-scheme: dark)">
-<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js')</script><link rel="stylesheet" href="tracker.css"></head>
-<body><header><a class="brand" href="index.html">Powerbuilding</a><nav class="menu"><a href="index.html">Home</a><a href="train.html">Train</a><a href="progress.html" class=on>Progress</a><a href="basics.html">How it works</a><a href="block1.html">Weeks 1–5</a><a href="block2.html">Weeks 6–10</a><a href="test.html">Weeks 11–12</a><a href="exercises.html">Exercises</a><a href="nutrition.html">Food</a><a href="recovery.html">Cardio + sleep</a><a href="research.html">Research</a></nav></header>
-<main><h1>Progress</h1><div id="app" aria-live="polite"></div><script src="core.js"></script><script src="progress.js"></script></main>
-<footer><span class="tag e">E</span> research-backed · <span class="tag i">I</span> coaching inference</footer></body></html>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Training app has moved</title>
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#1a1d22" media="(prefers-color-scheme: dark)">
+<style>
+:root{color-scheme:light dark;--bg:#f6f7f9;--card:#fff;--ink:#16191d;--dim:#5d6672;--line:#e1e4e8;--accent:#c2410c;--on:#fff;--ok:#15803d}
+@media (prefers-color-scheme:dark){:root{--bg:#111317;--card:#1a1d22;--ink:#eceef1;--dim:#9aa3ad;--line:#2b3038;--accent:#fb923c;--on:#16110d;--ok:#4ade80}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+main{max-width:520px;margin:0 auto;padding:40px 16px}h1{font-size:1.6rem;margin:0 0 .4em}p{color:var(--dim)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin:16px 0}
+.btn{display:flex;align-items:center;justify-content:center;min-height:52px;border-radius:12px;background:var(--accent);color:var(--on);font-weight:700;text-decoration:none;border:0;font:inherit;font-weight:700;width:100%;cursor:pointer}
+.btn.sec{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+ol{padding-left:1.2em}li{margin:.4em 0}.ok{color:var(--ok);font-weight:700}.err{color:#b91c1c;font-weight:700}
+</style></head><body><main>
+<h1>The training app has moved</h1>
+<p>It now has accounts, custom plans, an exercise library and AI planning. It lives at a new address.</p>
+<div class="card" id="data" hidden><b>Workouts saved on this phone</b><p id="data-msg"></p><button class="btn sec" id="move">Move them to the new app</button><p id="move-res"></p></div>
+<a class="btn" id="go" href="https://training.tp-0675p4.workers.dev/">Open the new app</a>
+<div class="card"><b>Put it on your Home Screen</b><ol><li>Open the new app in Safari.</li><li>Tap Share, then <b>Add to Home Screen</b>.</li><li>Delete the old Training icon (press and hold it, then Remove App).</li></ol></div>
+</main>
+<script>
+const API = "https://training.tp-0675p4.workers.dev/api";
+// v1 of the app stored accounts in this browser: tp.accounts = [{id,name}], tp.data.<id> = {sessions, bodyweight}
+let accts = []; try { accts = JSON.parse(localStorage.getItem("tp.accounts") || "[]"); } catch {}
+const withData = accts.map(a => ({ ...a, d: JSON.parse(localStorage.getItem("tp.data." + a.id) || "{}") })).filter(a => (a.d.sessions || []).length || (a.d.bodyweight || []).length);
+if (withData.length) {
+  document.getElementById("data").hidden = false;
+  document.getElementById("data-msg").textContent = withData.map(a => `${a.name}: ${(a.d.sessions || []).length} workouts, ${(a.d.bodyweight || []).length} weigh-ins`).join(" · ") + ". Moving creates (or signs in to) an account with the same name in the new app.";
+}
+async function call(path, body, id) {
+  const r = await fetch(API + path, { method: "POST", headers: { "content-type": "application/json", ...(id ? { "x-account": id } : {}) }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({})); if (!r.ok) { const e = new Error(j.error || r.status); e.status = r.status; throw e; } return j;
+}
+document.getElementById("move").onclick = async () => {
+  const out = document.getElementById("move-res"); out.textContent = "Moving…";
+  try {
+    for (const a of withData) {
+      let acct; try { acct = await call("/login", { name: a.name }); } catch (e) { if (e.status !== 404) throw e; acct = await call("/account", { name: a.name }); }
+      const now = Date.now(), docs = [];
+      for (const s of a.d.sessions || []) docs.push({ kind: "log", id: s.id, data: { ...s, exercises: s.exercises.map(e => ({ ...e, ex: e.slug || null })) }, updated: s.updated || now });
+      for (const b of a.d.bodyweight || []) docs.push({ kind: "bw", id: b.date, data: { id: b.date, date: b.date, lb: b.lb }, updated: now });
+      await call("/sync", { cursor: 0, docs }, acct.id);
+    }
+    out.className = "ok"; out.textContent = "Done. Sign in to the new app with the same name to see them.";
+    localStorage.setItem("tp.moved", "1");
+  } catch (e) { out.className = "err"; out.textContent = "Couldn't move them: " + e.message + ". Check your connection and try again."; }
+};
+</script></body></html>
