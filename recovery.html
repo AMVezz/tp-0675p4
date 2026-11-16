@@ -13,35 +13,26 @@ ol{padding-left:1.2em}li{margin:.4em 0}.ok{color:var(--ok);font-weight:700}.err{
 </style></head><body><main>
 <h1>The training app has moved</h1>
 <p>It now has accounts, custom plans, an exercise library and AI planning. It lives at a new address.</p>
-<div class="card" id="data" hidden><b>Workouts saved on this phone</b><p id="data-msg"></p><button class="btn sec" id="move">Move them to the new app</button><p id="move-res"></p></div>
+<div class="card" id="data" hidden><b>Workouts saved on this phone</b><p>Tap to open the new app with them. Sign in (or create your account), and they're added to it.</p><div id="moves"></div></div>
 <a class="btn" id="go" href="https://training.tp-0675p4.workers.dev/">Open the new app</a>
 <div class="card"><b>Put it on your Home Screen</b><ol><li>Open the new app in Safari.</li><li>Tap Share, then <b>Add to Home Screen</b>.</li><li>Delete the old Training icon (press and hold it, then Remove App).</li></ol></div>
 </main>
 <script>
-const API = "https://training.tp-0675p4.workers.dev/api";
-// v1 of the app stored accounts in this browser: tp.accounts = [{id,name}], tp.data.<id> = {sessions, bodyweight}
+const APP = "https://training.tp-0675p4.workers.dev/index.html";
+// v1 of the app stored accounts in this browser: tp.accounts = [{id,name}], tp.data.<id> = {sessions, bodyweight}.
+// Hand-over: open the new app with the data in the URL fragment (#import=<base64 JSON>; fragments never reach a server).
+// The new app keeps it until you're signed in, then imports it into that account (core.js boot/signedIn -> importBackup).
 let accts = []; try { accts = JSON.parse(localStorage.getItem("tp.accounts") || "[]"); } catch {}
 const withData = accts.map(a => ({ ...a, d: JSON.parse(localStorage.getItem("tp.data." + a.id) || "{}") })).filter(a => (a.d.sessions || []).length || (a.d.bodyweight || []).length);
 if (withData.length) {
   document.getElementById("data").hidden = false;
-  document.getElementById("data-msg").textContent = withData.map(a => `${a.name}: ${(a.d.sessions || []).length} workouts, ${(a.d.bodyweight || []).length} weigh-ins`).join(" · ") + ". Moving creates (or signs in to) an account with the same name in the new app.";
-}
-async function call(path, body, id) {
-  const r = await fetch(API + path, { method: "POST", headers: { "content-type": "application/json", ...(id ? { "x-account": id } : {}) }, body: JSON.stringify(body) });
-  const j = await r.json().catch(() => ({})); if (!r.ok) { const e = new Error(j.error || r.status); e.status = r.status; throw e; } return j;
-}
-document.getElementById("move").onclick = async () => {
-  const out = document.getElementById("move-res"); out.textContent = "Moving…";
-  try {
-    for (const a of withData) {
-      let acct; try { acct = await call("/login", { name: a.name }); } catch (e) { if (e.status !== 404) throw e; acct = await call("/account", { name: a.name }); }
-      const now = Date.now(), docs = [];
-      for (const s of a.d.sessions || []) docs.push({ kind: "log", id: s.id, data: { ...s, exercises: s.exercises.map(e => ({ ...e, ex: e.slug || null })) }, updated: s.updated || now });
-      for (const b of a.d.bodyweight || []) docs.push({ kind: "bw", id: b.date, data: { id: b.date, date: b.date, lb: b.lb }, updated: now });
-      await call("/sync", { cursor: 0, docs }, acct.id);
-    }
-    out.className = "ok"; out.textContent = "Done. Sign in to the new app with the same name to see them.";
+  document.getElementById("moves").innerHTML = withData.map((a, i) => `<a class="btn sec" style="margin-top:8px" data-i="${i}" href="#">Move ${(a.d.sessions || []).length} workouts and ${(a.d.bodyweight || []).length} weigh-ins (${a.name.replace(/[<>&"]/g, "")})</a>`).join("");
+  document.getElementById("moves").onclick = e => {
+    const el = e.target.closest("[data-i]"); if (!el) return; e.preventDefault();
+    const a = withData[+el.dataset.i];
+    const json = JSON.stringify({ accounts: [{ name: a.name, data: { sessions: a.d.sessions || [], bodyweight: a.d.bodyweight || [] } }] });
     localStorage.setItem("tp.moved", "1");
-  } catch (e) { out.className = "err"; out.textContent = "Couldn't move them: " + e.message + ". Check your connection and try again."; }
-};
+    location.href = APP + "#import=" + btoa(unescape(encodeURIComponent(json)));
+  };
+}
 </script></body></html>
